@@ -18,7 +18,6 @@ axios.interceptors.request.use(res => {
 })
 
 axios.interceptors.response.use((res) => {
-    // res.config.metadata.endTime = new Date()
     res.responsetime = new Date().getTime() - res.config.metadata.startTime
     return res;
   }, function (error) {
@@ -36,24 +35,28 @@ module.exports.checkHandler = class checkHandler{
     }
 
     async createCheck(req,res){
-        // console.log(check)
         try{
+            //make an instance of check class.
             let check = new checks.check();
+            //make an instance of report class.
             let report = new reports.report();
             check.url = req.body.url;
             check.name = req.body.name;
             check.protocol = req.body.url.split(":")[0];
+            //Add the check and the report to the cache.
             cache.reportCache.set(check.name,report)
             cache.checkCache.set(check.name,check);
+            //Add the check and the report to the Map.
             reportMap.set(check.name,report)
             checkMap.set(check.name,check);
-            // console.log(cache.checkCache)
+            //set the total response time and the number of requests to 0.
             this.time = 0;
             this.n = 0;
             this.available= false;
+            //send a request to the url.
             [this.available,check.url,this.n,this.time] = await sendreq(this.available,check,this.n,this.time)
+            //make a polling request with intervals equal to 5 minutes.
             setInterval(async()=>{
-                // req.url
                 [this.available,check.url,this.n,this.time] = await sendreq(this.available,check,this.n,this.time)
             },300000);
             console.log(cache.reportCache.get(check.name));
@@ -67,10 +70,13 @@ module.exports.checkHandler = class checkHandler{
     
     async getCheck(req,res){
         try{
+            //Get check from cache
             let check = cache.checkCache.get(req.params.name);
+            //if the check is not in the cache get it from the Map.
             if(check == undefined){
                 check = checkMap.get(req.params.name);
             }
+            //if check is not in the cache nor the Map then the check does not exist.
             if(check == undefined){
                 res.send("Check does not exist");
                 return;
@@ -81,18 +87,44 @@ module.exports.checkHandler = class checkHandler{
             res.status(500).sent("Something went wrong");
         }
     }
+
+    async updateCheck(req,res){
+        try{
+            //Get check from cache
+            let check = cache.checkCache.get(req.params.name);
+            //if the check is not in the cache get it from the Map.
+            if(check == undefined){
+                check = checkMap.get(req.params.name);
+            }
+            //if check is not in the cache nor the Map then the check does not exist.
+            if(check == undefined){
+                res.send("Check does not exist");
+                return;
+            }
+            check.name = req.body.name || check.name;
+            check.url = req.body.url || check.url;
+            check.protocol = req.body.url.split(":")[0] || check.protocol;
+            checkMap.set(check.name,check);
+            cache.checkCache.set(check.name,check);
+            res.send("updated");
+        }catch(e){
+            console.log(e);
+            res.status(500).sent("Something went wrong");
+        }
+    }
+
 }
 
 async function sendreq(available,check,n,time){
     try{
         if(!(check.url)) return;
-        res = axios.get(check.url);
+        let res = axios.get(check.url);
         let report = cache.reportCache.get(check.name);
         if(report == undefined){
             report = reportMap.get(check.name);
         }
-        // console.log(cache.reportCache.get(check.name))
-        response = await res;
+        let response = await res;
+        report.history.push({time:new Date(), request:n+1});
         if(n == Number.MAX_SAFE_INTEGER){
             n = 0;
             time = 0;
@@ -128,6 +160,5 @@ async function sendreq(available,check,n,time){
         console.log(e);
         available= false;
         throw new Error(e);
-        return [available,check.url,n,time];
     }
 }
