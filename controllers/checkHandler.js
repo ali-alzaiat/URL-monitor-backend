@@ -103,10 +103,34 @@ module.exports.checkHandler = class checkHandler{
             }
             check.name = req.body.name || check.name;
             check.url = req.body.url || check.url;
-            check.protocol = req.body.url.split(":")[0] || check.protocol;
+            check.protocol = req.body.url?.split(":")[0] || check.protocol;
+            checkMap.delete(req.params.name);
+            cache.checkCache.del(req.params.name);
             checkMap.set(check.name,check);
             cache.checkCache.set(check.name,check);
             res.send("updated");
+        }catch(e){
+            console.log(e);
+            res.status(500).sent("Something went wrong");
+        }
+    }
+
+    async deleteCheck(req,res){
+        try{
+            //Get check from cache
+            let check = cache.checkCache.get(req.params.name);
+            //if the check is not in the cache get it from the Map.
+            if(check == undefined){
+                check = checkMap.get(req.params.name);
+            }
+            //if check is not in the cache nor the Map then the check does not exist.
+            if(check == undefined){
+                res.send("Check does not exist");
+                return;
+            }
+            checkMap.delete(req.params.name);
+            cache.checkCache.del(req.params.name);
+            res.send("Deleted");
         }catch(e){
             console.log(e);
             res.status(500).sent("Something went wrong");
