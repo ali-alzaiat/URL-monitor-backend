@@ -1,6 +1,11 @@
 let express = require('express');
 let axios = require("axios");
+let cache = require('../helpers/storage')
+let checks = require('../models/checks')
+let reports = require('../models/report')
 let app = express();
+let checkMap = new Map();
+let reportMap = new Map();
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
@@ -31,36 +36,62 @@ module.exports.checkHandler = class checkHandler{
     }
 
     async createCheck(req,res){
-        console.log(this)
-        this.url = req.body.url;
-        this.time = 0;
-        this.n = 0;
-        this.available= false;
-        [this.available,this.url,this.n,this.time] = await sendreq(this.available,this.url,this.n,this.time)
-        setInterval(async()=>{
-            // req.url
-            [this.available,this.url,this.n,this.time] = await sendreq(this.available,this.url,this.n,this.time)
-        },300000);
-        res.send(this.available)
+        // console.log(check)
+        try{
+            let check = new checks.check();
+            let report = new reports.report();
+            check.url = req.body.url;
+            check.name = req.body.name;
+            check.protocol = req.body.url.split(":")[0];
+            cache.reportCache.set(check.name,report)
+            cache.checkCache.set(check.name,check);
+            reportMap.set(check.name,report)
+            checkMap.set(check.name,check);
+            // console.log(cache.checkCache)
+            this.time = 0;
+            this.n = 0;
+            this.available= false;
+            [this.available,check.url,this.n,this.time] = await sendreq(this.available,check,this.n,this.time)
+            setInterval(async()=>{
+                // req.url
+                [this.available,check.url,this.n,this.time] = await sendreq(this.available,check,this.n,this.time)
+            },300000);
+            console.log(cache.reportCache.get(check.name));
+            res.send(reportMap.get(check.name))    
+        }catch(e){
+            console.log(e);
+            res.status(500).send("Something went wrong");
+        }
             
     }  
     
     async getCheck(req,res){
-        if(this.url != req.body.url){
-            res.write("Doesn't exist");
-            res.end();
-        }
-        else{
-            res.write(JSON.stringify({'available':this.available,"Response time":this.time/this.n, "uptime":this.n}));
-            res.end();
+        try{
+            let check = cache.checkCache.get(req.params.name);
+            if(check == undefined){
+                check = checkMap.get(req.params.name);
+            }
+            if(check == undefined){
+                res.send("Check does not exist");
+                return;
+            }
+            res.send(check);
+        }catch(e){
+            console.log(e);
+            res.status(500).sent("Something went wrong");
         }
     }
 }
 
-async function sendreq(available,url,n,time){
+async function sendreq(available,check,n,time){
     try{
-        if(!(url)) return;
-        res = axios.get(url);
+        if(!(check.url)) return;
+        res = axios.get(check.url);
+        let report = cache.reportCache.get(check.name);
+        if(report == undefined){
+            report = reportMap.get(check.name);
+        }
+        // console.log(cache.reportCache.get(check.name))
         response = await res;
         if(n == Number.MAX_SAFE_INTEGER){
             n = 0;
@@ -77,11 +108,26 @@ async function sendreq(available,url,n,time){
             console.log('unavailable');
             available= false;
         }
-        console.log(url)
-        return [available,url,n,time];
+        console.log(check.url)
+        if(report.status == 'available' && !available){
+            report.outages = report.outages+1;
+        }
+        report.status = available?'available':'unavailable';
+        report.responseTime = available?time/n:0;
+        if(available){
+            report.uptime = report.uptime+1;
+        }else{
+            report.downtime = report.downtime+1;
+        }
+        console.log((report.uptime+report.downtime));
+        report.availability = (report.uptime/(report.uptime+report.downtime))*100;
+        cache.reportCache.set(check.name,report)
+        reportMap.set(check.name,report)
+        return [available,check.url,n,time];
     }catch(e){
         console.log(e);
         available= false;
-        return [available,url,n,time];
+        throw new Error(e);
+        return [available,check.url,n,time];
     }
 }

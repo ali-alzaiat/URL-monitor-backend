@@ -1,4 +1,4 @@
-export class check{
+module.exports.check = class check{
     name;       //The name of the check.
     url;        //The URL to be monitored.
     protocol;   //The resource protocol name HTTP, HTTPS, or TCP.
