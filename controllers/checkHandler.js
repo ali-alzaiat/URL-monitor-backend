@@ -3,6 +3,7 @@ let axios = require("axios");
 let cache = require('../helpers/storage')
 let checks = require('../models/checks')
 let reports = require('../models/report')
+const https = require('https');
 let app = express();
 let checkMap = new Map();
 let reportMap = new Map();
@@ -39,7 +40,12 @@ module.exports.checkHandler = class checkHandler{
             let report = new reports.report();
             check.url = req.body.url;
             check.name = req.body.name;
-            check.protocol = req.body.url.split(":")[0];
+            check.ignoreSSL = req.body.ignoreSSL;
+            check.protocol = req.body.protocol;
+            if(!check.url || !check.name || !check.ignoreSSL || !check.protocol){
+                res.status(500).send("url, name, protocol and ignoreSSL shouldn't be empty");
+                return;
+            }
             //Add the check and the report to the cache.
             cache.reportCache.set(check.name,report)
             cache.checkCache.set(check.name,check);
@@ -73,7 +79,7 @@ module.exports.checkHandler = class checkHandler{
             }
             //if check is not in the cache nor the Map then the check does not exist.
             if(check == undefined){
-                res.send("Check does not exist");
+                res.status(404).send("Check does not exist");
                 return;
             }
             res.send(check);
@@ -93,7 +99,7 @@ module.exports.checkHandler = class checkHandler{
             }
             //if check is not in the cache nor the Map then the check does not exist.
             if(check == undefined){
-                res.send("Check does not exist");
+                res.status(404).send("Check does not exist");
                 return;
             }
             check.name = req.body.name || check.name;
@@ -159,7 +165,11 @@ async function sendreq(available,check){
     try{
         let time = 0;
         if(!(check.url)) return;
-        let res = axios.get(check.url);
+        let ignoreSSL = (check.ignoreSSL.toLowerCase() == 'true')?true:false;
+        const httpsAgent = new https.Agent({ rejectUnauthorized: !check.ignoreSSL });
+        let url = check.url.replace(/\w+:\/\//, '')
+        console.log(url);
+        let res = axios.get(check.protocol+"://"+url,{ httpsAgent });
         let report = cache.reportCache.get(check.name);
         if(report == undefined){
             report = reportMap.get(check.name);
