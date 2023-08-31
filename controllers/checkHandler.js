@@ -28,10 +28,7 @@ axios.interceptors.response.use((res) => {
 module.exports.checkHandler = class checkHandler{
     
     constructor(){
-        this.time = 0;
-        this.n = 0;
         this.available= false;
-        this.url;
     }
 
     async createCheck(req,res){
@@ -50,14 +47,12 @@ module.exports.checkHandler = class checkHandler{
             reportMap.set(check.name,report)
             checkMap.set(check.name,check);
             //set the total response time and the number of requests to 0.
-            this.time = 0;
-            this.n = 0;
             this.available= false;
             //send a request to the url.
-            [this.available,check.url,this.n,this.time] = await sendreq(this.available,check,this.n,this.time)
+            [this.available,check.url] = await sendreq(this.available,check)
             //make a polling request with intervals equal to 5 minutes.
             setInterval(async()=>{
-                [this.available,check.url,this.n,this.time] = await sendreq(this.available,check,this.n,this.time)
+                [this.available,check.url] = await sendreq(this.available,check)
             },300000);
             console.log(cache.reportCache.get(check.name));
             res.send(reportMap.get(check.name))    
@@ -137,28 +132,46 @@ module.exports.checkHandler = class checkHandler{
         }
     }
 
+    async getReport(req,res){
+        try{
+            //Get report from cache
+            let report = cache.reportCache.get(req.params.name);
+            //if the report is not in the cache get it from the Map.
+            if(report == undefined){
+                report = reportMapMap.get(req.params.name);
+            }
+            //if report is not in the cache nor the Map then the report does not exist.
+            if(report == undefined){
+                res.send("Report does not exist");
+                return;
+            }
+            res.send(report);
+        }catch(e){
+            console.log(e);
+            res.status(500).sent("Something went wrong");
+        }
+    }
+
+
 }
 
-async function sendreq(available,check,n,time){
+async function sendreq(available,check){
     try{
+        let time = 0;
         if(!(check.url)) return;
         let res = axios.get(check.url);
         let report = cache.reportCache.get(check.name);
         if(report == undefined){
             report = reportMap.get(check.name);
         }
+        let n = (report.uptime+report.downtime)+1;
         let response = await res;
-        report.history.push({time:new Date(), request:n+1});
-        if(n == Number.MAX_SAFE_INTEGER){
-            n = 0;
-            time = 0;
-        }
+        report.history.push({time:new Date(), request:report.uptime+report.downtime+1});
         if(response.status === 200 || response.status === 301 || response.status === 302) {
             console.log('available');
             available= true;
             console.log(available);
-            time += response.responsetime;
-            n++;
+            time = (report.responseTime*(report.uptime+report.downtime)) + response.responsetime;
             console.log(time/n);
         } else {
             console.log('unavailable');
@@ -176,10 +189,11 @@ async function sendreq(available,check,n,time){
             report.downtime = report.downtime+1;
         }
         console.log((report.uptime+report.downtime));
+        console.log(n);
         report.availability = (report.uptime/(report.uptime+report.downtime))*100;
         cache.reportCache.set(check.name,report)
         reportMap.set(check.name,report)
-        return [available,check.url,n,time];
+        return [available,check.url];
     }catch(e){
         console.log(e);
         available= false;
