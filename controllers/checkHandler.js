@@ -42,6 +42,14 @@ module.exports.checkHandler = class checkHandler{
             check.name = req.body.name;
             check.ignoreSSL = req.body.ignoreSSL;
             check.protocol = req.body.protocol;
+            check.path = (req.body.path)?req.body.path:check.path;
+            check.timeout = (req.body.timeout)?req.body.timeout:check.timeout;
+            check.interval = (req.body.interval)?req.body.interval:check.interval;
+            check.threshold = (req.body.threshold)?req.body.threshold:check.threshold;
+            check.authentication = (req.body.authentication)?req.body.authentication:check.authentication;
+            check.httpHeaders = (req.body.httpHeaders)?req.body.httpHeaders:check.httpHeaders;
+            check.assert = (req.body.assert)?req.body.assert:check.assert;
+
             if(!check.url || !check.name || !check.ignoreSSL || !check.protocol){
                 res.status(500).send("url, name, protocol and ignoreSSL shouldn't be empty");
                 return;
@@ -59,7 +67,7 @@ module.exports.checkHandler = class checkHandler{
             //make a polling request with intervals equal to 5 minutes.
             setInterval(async()=>{
                 [this.available,check.url] = await sendreq(this.available,check)
-            },300000);
+            },check.interval*60*1000);
             console.log(cache.reportCache.get(check.name));
             res.send(reportMap.get(check.name))    
         }catch(e){
@@ -167,9 +175,15 @@ async function sendreq(available,check){
         if(!(check.url)) return;
         let ignoreSSL = (check.ignoreSSL.toLowerCase() == 'true')?true:false;
         const httpsAgent = new https.Agent({ rejectUnauthorized: !check.ignoreSSL });
-        let url = check.url.replace(/\w+:\/\//, '')
+        let url = check.protocol+"://"+check.url.replace(/\w+:\/\//, '')+check.path;
         console.log(url);
-        let res = axios.get(check.protocol+"://"+url,{ httpsAgent });
+        let header = {...{ httpsAgent },...JSON.parse(check.httpHeaders)}
+        console.log(header);
+        let res = axios.request({
+            timeout: parseFloat(check.timeout)*1000,
+            method: "GET",
+            url: url
+          },header);
         let report = cache.reportCache.get(check.name);
         if(report == undefined){
             report = reportMap.get(check.name);
