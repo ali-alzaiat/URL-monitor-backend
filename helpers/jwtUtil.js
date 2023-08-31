@@ -3,6 +3,7 @@ require('dotenv').config()
 
 exports.generateToken = (userName,email)=>{
     var token = jwt.sign({ userName: userName, email:email }, process.env.SECRET_KEY, {expiresIn:"3h"});
+    // console.log(token);
     return token;
 }
 exports.verifyToken = (token)=>{

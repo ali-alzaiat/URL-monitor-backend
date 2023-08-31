@@ -4,9 +4,11 @@ let cache = require('../helpers/storage')
 let checks = require('../models/checks')
 let reports = require('../models/report')
 const https = require('https');
+let {users} = require("./loginHandler")
 let app = express();
 let checkMap = new Map();
 let reportMap = new Map();
+let user;
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
@@ -34,6 +36,8 @@ module.exports.checkHandler = class checkHandler{
 
     async createCheck(req,res){
         try{
+            //Get the user data
+            user = users.get(res.locals.user.userName)
             //make an instance of check class.
             let check = new checks.check();
             //make an instance of report class.
@@ -54,6 +58,8 @@ module.exports.checkHandler = class checkHandler{
                 res.status(500).send("url, name, protocol and ignoreSSL shouldn't be empty");
                 return;
             }
+            //add the name of the check to the user checks
+            user.checks.push(check.name);
             //Add the check and the report to the cache.
             cache.reportCache.set(check.name,report)
             cache.checkCache.set(check.name,check);
@@ -63,6 +69,7 @@ module.exports.checkHandler = class checkHandler{
             //set the total response time and the number of requests to 0.
             this.available= false;
             //send a request to the url.
+            console.log(user);
             [this.available,check.url] = await sendreq(this.available,check)
             //make a polling request with intervals equal to 5 minutes.
             setInterval(async()=>{
@@ -79,6 +86,10 @@ module.exports.checkHandler = class checkHandler{
     
     async getCheck(req,res){
         try{
+            if(!user.checks.includes(req.params.name)){
+                res.status(401).send("unauthorized access");
+                return;
+            }
             //Get check from cache
             let check = cache.checkCache.get(req.params.name);
             //if the check is not in the cache get it from the Map.
@@ -152,7 +163,7 @@ module.exports.checkHandler = class checkHandler{
             let report = cache.reportCache.get(req.params.name);
             //if the report is not in the cache get it from the Map.
             if(report == undefined){
-                report = reportMapMap.get(req.params.name);
+                report = reportMap.get(req.params.name);
             }
             //if report is not in the cache nor the Map then the report does not exist.
             if(report == undefined){
@@ -176,9 +187,7 @@ async function sendreq(available,check){
         let ignoreSSL = (check.ignoreSSL.toLowerCase() == 'true')?true:false;
         const httpsAgent = new https.Agent({ rejectUnauthorized: !check.ignoreSSL });
         let url = check.protocol+"://"+check.url.replace(/\w+:\/\//, '')+check.path;
-        console.log(url);
         let header = {...{ httpsAgent },...JSON.parse(check.httpHeaders)}
-        console.log(header);
         let res = axios.request({
             timeout: parseFloat(check.timeout)*1000,
             method: "GET",
@@ -212,8 +221,6 @@ async function sendreq(available,check){
         }else{
             report.downtime = report.downtime+1;
         }
-        console.log((report.uptime+report.downtime));
-        console.log(n);
         report.availability = (report.uptime/(report.uptime+report.downtime))*100;
         cache.reportCache.set(check.name,report)
         reportMap.set(check.name,report)

@@ -51,3 +51,5 @@ module.exports.signIn = (req,res)=>{
         res.status(500).send("Something went wrong");
     }
 }
+
+exports.users = users;
