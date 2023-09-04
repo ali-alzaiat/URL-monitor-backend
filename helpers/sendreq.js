@@ -3,9 +3,10 @@ let axios = require("axios");
 let {checkMap} = require('../models/checks')
 let {reportMap} = require('../models/report')
 let {reportCache} = require("./storage")
+let {sendEmail} = require("./sendEmail")
 
 
-exports.sendreq = async function sendreq(available,check){
+exports.sendreq = async function sendreq(available,check,email){
     try{
         let time = 0;
         //If the url is undefined return.
@@ -35,12 +36,18 @@ exports.sendreq = async function sendreq(available,check){
         console.log(report.history?.length)
         let response = await res;
         if(response.status === (check.assert || 200)) {
+            if(report.status === 'unavailable'){
+                sendEmail(email,"url up")
+            }
             console.log('available');
             available= true;
             console.log(available);
             time = (report.responseTime*(report.history?.length)) + response.responsetime;
             console.log(time/n);
         } else {
+            if(report.status === 'available'){
+                sendEmail(email,"url down")
+            }
             console.log('unavailable');
             available= false;
         }

@@ -71,10 +71,10 @@ module.exports.checkHandler = class checkHandler{
             this.available= false;
             //send a request to the url.
             console.log(user);
-            [this.available,check.url] = await sendreq(this.available,check)
+            [this.available,check.url] = await sendreq(this.available,check,user.email)
             //make a polling request with intervals equal to 5 minutes.
             setInterval(async()=>{
-                [this.available,check.url] = await sendreq(this.available,check)
+                [this.available,check.url] = await sendreq(this.available,check,user.email)
             },check.interval*60*1000);
             console.log(cache.reportCache.get(check.name));
             res.send(reportMap.get(check.name))    
