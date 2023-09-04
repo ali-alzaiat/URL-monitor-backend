@@ -8,7 +8,9 @@ module.exports.check = class check{
     interval = 10;  //(defaults to 10 minutes): The time interval for polling requests (optional).
     threshold = 1;  //(defaults to 1 failure): The threshold of failed requests that will create an alert (optional).
     authentication; //An HTTP authentication header, with the Basic scheme, to be sent with the polling request (optional).
-    httpHeaders;    //A list of key/value pairs custom HTTP headers to be sent with the polling request (optional).
+    httpHeaders="{}";    //A list of key/value pairs custom HTTP headers to be sent with the polling request (optional).
     assert;         //The response assertion to be used on the polling response (optional).
     tags = [];      //A list of the check tags (optional).
 }
+let checkMap = new Map();
+exports.checkMap = checkMap;

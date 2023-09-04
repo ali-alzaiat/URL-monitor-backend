@@ -5,12 +5,13 @@ let checks = require('../models/checks')
 let reports = require('../models/report')
 const https = require('https');
 let {users} = require("./loginHandler")
+let {sendreq} = require("../helpers/sendreq")
 let app = express();
-let checkMap = new Map();
-let reportMap = new Map();
-let user;
+let {checkMap} = require('../models/checks')
+let {reportMap} = require('../models/report')
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+
 
 axios.interceptors.request.use(res => {
     res.metadata = { startTime: new Date().getTime()}
@@ -37,7 +38,7 @@ module.exports.checkHandler = class checkHandler{
     async createCheck(req,res){
         try{
             //Get the user data
-            user = users.get(res.locals.user.userName)
+            let user = users.get(res.locals.user.userName)
             //make an instance of check class.
             let check = new checks.check();
             //make an instance of report class.
@@ -86,6 +87,7 @@ module.exports.checkHandler = class checkHandler{
     
     async getCheck(req,res){
         try{
+            let user = users.get(res.locals.user.userName);
             if(!user.checks.includes(req.params.name)){
                 res.status(401).send("unauthorized access");
                 return;
@@ -178,56 +180,4 @@ module.exports.checkHandler = class checkHandler{
     }
 
 
-}
-
-async function sendreq(available,check){
-    try{
-        let time = 0;
-        if(!(check.url)) return;
-        let ignoreSSL = (check.ignoreSSL.toLowerCase() == 'true')?true:false;
-        const httpsAgent = new https.Agent({ rejectUnauthorized: !check.ignoreSSL });
-        let url = check.protocol+"://"+check.url.replace(/\w+:\/\//, '')+check.path;
-        let header = {...{ httpsAgent },...JSON.parse(check.httpHeaders)}
-        let res = axios.request({
-            timeout: parseFloat(check.timeout)*1000,
-            method: "GET",
-            url: url
-          },header);
-        let report = cache.reportCache.get(check.name);
-        if(report == undefined){
-            report = reportMap.get(check.name);
-        }
-        let n = (report.uptime+report.downtime)+1;
-        let response = await res;
-        report.history.push({time:new Date(), request:report.uptime+report.downtime+1});
-        if(response.status === 200 || response.status === 301 || response.status === 302) {
-            console.log('available');
-            available= true;
-            console.log(available);
-            time = (report.responseTime*(report.uptime+report.downtime)) + response.responsetime;
-            console.log(time/n);
-        } else {
-            console.log('unavailable');
-            available= false;
-        }
-        console.log(check.url)
-        if(report.status == 'available' && !available){
-            report.outages = report.outages+1;
-        }
-        report.status = available?'available':'unavailable';
-        report.responseTime = available?time/n:0;
-        if(available){
-            report.uptime = report.uptime+1;
-        }else{
-            report.downtime = report.downtime+1;
-        }
-        report.availability = (report.uptime/(report.uptime+report.downtime))*100;
-        cache.reportCache.set(check.name,report)
-        reportMap.set(check.name,report)
-        return [available,check.url];
-    }catch(e){
-        console.log(e);
-        available= false;
-        throw new Error(e);
-    }
 }

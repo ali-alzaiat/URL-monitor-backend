@@ -7,3 +7,5 @@ module.exports.report = class report{
     responseTime = 0;   //The average response time for the URL.
     history = [];        //Timestamped logs of the polling requests.
 }
+let reportMap = new Map();
+exports.reportMap = reportMap;
